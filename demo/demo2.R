@@ -2,7 +2,7 @@
 # http://blog.revolutionanalytics.com/2009/11/choropleth-challenge-result.html
 # https://www.census.gov/geo/maps-data/data/cbf/cbf_counties.html
 
-devtools::load_all(".")
+devtools::load_all("../tmap/pkg")
 #library(tmap)
 library(raster)
 library(rgeos)
@@ -16,11 +16,11 @@ library(maptools)
 library(grid)
 
 ## read and crop shape 
-zipfile = "../demo/shape/gz_2010_us_050_00_500k.zip"
 zipdir <- tempdir()
-unzip(zipfile, exdir=zipdir)
-
-shp_cty <-  read_shape(file = paste0(zipdir, "/gz_2010_us_050_00_500k.shp"))
+file <- file.path(zipdir, "tmp.zip")
+download.file("http://www2.census.gov/geo/tiger/GENZ2010/gz_2010_us_050_00_500k.zip", destfile = file)
+unzip(file, exdir=zipdir)
+shp_cty <-  read_shape(file=file.path(zipdir, "gz_2010_us_050_00_500k.shp"))
 shp_cty$fips <- paste0(shp_cty$STATE, shp_cty$COUNTY)
 
 data(state.fips)
@@ -29,25 +29,25 @@ shp_cty$state_name <- sub(":.*", "", shp_cty$state_name)
 shp_cty$mpname <- paste(tolower(shp_cty$state_name), tolower(shp_cty$NAME), sep=",")
 
 ## get contiguous US
-cont_cty <- crop_shape(shp_cty, matrix(c(-130, -60, 25, 50), nrow = 2, byrow = TRUE))
+cont_cty <- crop(shp_cty, matrix(c(-130, -60, 25, 50), nrow = 2, byrow = TRUE))
 cont_cty <- set_projection(cont_cty, "+init=epsg:2163") # U.S. National Atlas Equal Area Projection
 cont_st <- unionSpatialPolygons(cont_cty, cont_cty$state_name)
 
 ## get alaska
 non_cont <- shp_cty[is.na(shp_cty$state_name),]
-alaska <- crop_shape(non_cont, matrix(c(-180, -100, 40, 80), nrow = 2, byrow = TRUE), set.bbox = FALSE)
+alaska <- crop(non_cont, matrix(c(-180, -100, 40, 80), nrow = 2, byrow = TRUE), set.bbox = FALSE)
 
 alaska <- set_projection(alaska, "+proj=longlat +ellps=GRS80 +datum=NAD83 +towgs84=-0.9956,1.9013,0.5215,-0.025915,-0.009246,-0.011599,-0.00062 +no_defs")
 
 ## get hawaii
-hawaii <- crop_shape(non_cont, matrix(c(-160.5, -100, 0, 30), nrow = 2, byrow = TRUE), set.bbox = FALSE)
+hawaii <- crop(non_cont, matrix(c(-160.5, -100, 0, 30), nrow = 2, byrow = TRUE), set.bbox = FALSE)
 
 hawaii <- set_projection(hawaii, "+proj=tmerc +lat_0=21.66666666666667 +lon_0=-160.1666666666667 +k=1.000000 +x_0=500000 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs")
 
 
 
 ## process data
-unemp <- read.csv('../demo/data/US_unemployment09.csv',header=FALSE, stringsAsFactors=FALSE,
+unemp <- read.csv('./demo/data/US_unemployment09.csv',header=FALSE, stringsAsFactors=FALSE,
 				  col.names=c("blsid", "stfips", "cofips", "name", "year", "pop1", "pop2", "unempraw", "unemppct"))
 
 unemp$mpname <- tolower(paste(state.name[match(
@@ -86,47 +86,43 @@ qtm(cont_cty, fill="unemppct", style="kmeans", palette="PuRd")
 
 
 
+layers <- tm_borders("white", alpha = .25, lwd= 1) +
+  tm_fill("unemppct", style="fixed", breaks=c(seq(0, 10, by=2), 35), palette="PuRd", contrast = .9, title="Unemployment")
 
-tm <- tm_shape(cont_cty) +
-	tm_borders("white", alpha = .25, lwd= 1) +
-	tm_fill("unemppct", style="fixed", breaks=c(seq(0, 10, by=2), 35), palette="PuRd", contrast = .9) +
+tm <- tm_shape(cont_cty) + layers +
 tm_shape(cont_st) +
 	tm_borders("white", lwd = 2) +
-tm_layout(title="Unemployment", draw.frame=FALSE, bg.color = "gray90", outer.margins=0, title.cex = 1.5, legend.text.cex = 1.2)
+tm_layout(draw.frame=FALSE, bg.color = "gray90", outer.margins=0)
 
 
 # Alaska
-tm_ak <- tm_shape(alaska) +
-	tm_borders("white", alpha = .25, lwd= 1) +
-	tm_fill("unemppct", style="fixed", breaks=c(seq(0, 10, by=2), 35), palette="PuRd", contrast = .9) +
-	tm_layout(title="", bg.color = NA, draw.frame = FALSE, outer.margins=0, asp=0, legend.show=FALSE)
+tm_ak <- tm_shape(alaska) + layers +
+	tm_layout(bg.color = NA, draw.frame = FALSE, outer.margins=0, asp=0, legend.show=FALSE)
 
 # Hawaii
-tm_hi <- tm_shape(hawaii) +
-	tm_borders("white", alpha = .25, lwd= 1) +
-	tm_fill("unemppct", style="fixed", breaks=c(seq(0, 10, by=2), 35), palette="PuRd", contrast = .9) +
-	tm_layout(title="", bg.color = NA, draw.frame = FALSE, outer.margins=0, asp=0, legend.show=FALSE)
+tm_hi <- tm_shape(hawaii) + layers +
+	tm_layout(bg.color = NA, draw.frame = FALSE, outer.margins=0, asp=0, legend.show=FALSE)
 
 
 
 
 
-png("../demo/US_unemp.png", width=1000, height=700)
-print(tm)
-dev.off()
+# png("../demo/US_unemp.png", width=1000, height=700, res=220)
+# print(tm)
+# dev.off()
 
-png("../demo/US_unemp_small.png", width=545, height=382)
-print(tm + tm_layout(scale=.6))
-dev.off()
+# png("../demo/US_unemp_small.png", width=545, height=382, res=220)
+# print(tm + tm_layout(scale=.6))
+# dev.off()
 
-png("../demo/US_unemp_al_hi.png", width=1000, height=600)
-print(tm + tm_layout(inner.margins=c(.02, .02, .02, .1), title.position=c("right", "bottom"), legend.position=c("right", "bottom"), legend.width = .15))
+png("./demo/US_unemp_al_hi.png", width=1800, height=1000, res=220)
+print(tm + tm_layout(inner.margins=c(.02, .02, .02, .1), legend.position=c("right", "bottom"), legend.width = .15))
 print(tm_ak, vp=viewport(x=.1, y=.13, width=.2, height=.27))
 print(tm_hi, vp=viewport(x=.25, y=.075, width=.075, height=.1))
 dev.off()
 
-png("../demo/US_unemp_al_hi_small.png", width=545, height=328)
-print(tm + tm_layout(inner.margins=c(.02, .02, .02, .1), title.position=c("right", "bottom"), legend.position=c("right", "bottom"), legend.width = .15, scale=.6))
+png("./demo/US_unemp_al_hi_small.png", width=900, height=500, res=220)
+print(tm + tm_layout(inner.margins=c(.02, .02, .02, .1), legend.position=c("right", "bottom"), legend.width = .15, scale=.6))
 print(tm_ak + tm_layout(scale=.6), vp=viewport(x=.1, y=.13, width=.2, height=.27))
 print(tm_hi + tm_layout(scale=.6), vp=viewport(x=.25, y=.075, width=.075, height=.1))
 dev.off()
